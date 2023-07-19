@@ -119,7 +119,7 @@ func getAllData(db *mongo.Database, collectionName string) ([]interface{})   {
 }
 
 func dbConnection() (*mongo.Database) {
-	mongoURL := "mongodb+srv://NaimBiswas:yUhrDIMBoOAPKV2J@ecom.9wdffud.mongodb.net/eCom?retryWrites=true&w=majority"
+	mongoURL := "YOUR DB URL"
 	// collectionName := "excelData"
 	dbName := "eCom"
 
