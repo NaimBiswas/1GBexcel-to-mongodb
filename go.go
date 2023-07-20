@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"sync"
 
 	"log"
 	"time"
@@ -27,59 +29,150 @@ func main() {
 	importXLSX()
 }
 
-func importXLSX()  {
+// func importXLSX()  {
 
 	
-	xlsxFilePath, _ := filepath.Abs("./file/employeeSheets.xlsx")
+// 	xlsxFilePath, _ := filepath.Abs("./file/sampledocs-50mb-xlsx-file.xlsx")
+// 	xlsxFile, err := excelize.OpenFile(xlsxFilePath)
+// 	if err != nil {
+// 		log.Fatal(err)
+// 	}
+	
+// 	// db := dbConnection()
+
+// 	startTime := time.Now()
+// 	for _, sheetName  := range xlsxFile.GetSheetList() {
+// 		fmt.Println("sheet Name:",sheetName)
+// 		timeForEachSheet := time.Now()
+// 		rows, err := xlsxFile.GetRows(sheetName)
+// 		// columns, err := xlsxFile.GetCols(sheetName)
+
+// 		if err != nil {
+// 			log.Println("Error reading sheet rows:", err)
+// 			continue
+// 		}
+// 		colNames  := rows[0]
+// 		rowValues := rows[1:]
+		
+// 		var jsonData []map[string]interface{}
+// 		fmt.Printf("Xlsx Process Started for=================================================================::%v and time:: %v",sheetName, time.Now())
+// 		fmt.Println()
+// 		for _, rowValue := range rowValues {
+// 			data :=  make(map[string]interface{})
+
+// 			for idx, rV := range rowValue {
+// 				if colNames[idx] != "" {
+// 					data[colNames[idx]] = rV
+// 				 }
+// 			}
+// 			jsonData = append(jsonData, data)
+// 		}
+// 		// insertRecords(db, "excelData", jsonData)
+// 		jsonBytes, err := json.MarshalIndent(jsonData, "", "  ")
+// 		if err != nil {
+// 			log.Fatal(err)
+// 		}
+// 		outputFile, err := os.Create("./convertedFile/"+sheetName+".json")
+// 		defer outputFile.Close()
+		
+// 		// Write JSON data to a file
+// 		_, err = outputFile.Write(jsonBytes)
+// 		fmt.Println("Conversion completed. JSON data is stored in",sheetName+".json", time.Since(timeForEachSheet))
+// 	}
+// 	elapsedTime := time.Since(startTime)
+// 	// Print the elapsed time
+// 	fmt.Println("Insertion completed in:", elapsedTime)
+// }
+
+func importXLSX() {
+	xlsxFilePath, _ := filepath.Abs("./file/sampledocs-50mb-xlsx-file.xlsx")
 	xlsxFile, err := excelize.OpenFile(xlsxFilePath)
 	if err != nil {
 		log.Fatal(err)
 	}
-	
-	db := dbConnection()
 
+	// Create a WaitGroup to wait for all Goroutines to finish
+	var wg sync.WaitGroup
 	startTime := time.Now()
-	for _, sheetName  := range xlsxFile.GetSheetList() {
-		fmt.Println("sheet Name:",sheetName)
+
+	// Create a channel to send sheet names to Goroutines
+	sheetChan := make(chan string)
+
+	for i := 2; i < runtime.NumCPU(); i++ {
+		// Start Goroutines to process sheets concurrently
+		wg.Add(1)
+		go processSheet(&wg, sheetChan)
+	}
+
+	for _, sheetName := range xlsxFile.GetSheetList() {
+		// Send sheet names to Goroutines through the channel
+		sheetChan <- sheetName
+	}
+
+	// Close the channel to signal Goroutines that no more data will be sent
+	close(sheetChan)
+
+	// Wait for all Goroutines to finish
+	wg.Wait()
+
+	elapsedTime := time.Since(startTime)
+	// Print the elapsed time
+	fmt.Println("Insertion completed in:", elapsedTime)
+}
+
+func processSheet(wg *sync.WaitGroup, sheetChan chan string) {
+	for sheetName := range sheetChan {
+		xlsxFilePath, _ := filepath.Abs("./file/sampledocs-50mb-xlsx-file.xlsx")
+		xlsxFile, err := excelize.OpenFile(xlsxFilePath)
+		if err != nil {
+			log.Fatal(err)
+		}
+
 		timeForEachSheet := time.Now()
 		rows, err := xlsxFile.GetRows(sheetName)
-		// columns, err := xlsxFile.GetCols(sheetName)
-
 		if err != nil {
 			log.Println("Error reading sheet rows:", err)
 			continue
 		}
-		colNames  := rows[0]
+
+		colNames := rows[0]
 		rowValues := rows[1:]
-		
+
 		var jsonData []map[string]interface{}
-		fmt.Printf("Xlsx Process Started for=================================================================::%v and time:: %v",sheetName, time.Now())
+		fmt.Printf("Xlsx Process Started for=================================================================::%v and time:: %v", sheetName, time.Now())
 		fmt.Println()
 		for _, rowValue := range rowValues {
-			data :=  make(map[string]interface{})
+			data := make(map[string]interface{})
 
 			for idx, rV := range rowValue {
 				if colNames[idx] != "" {
 					data[colNames[idx]] = rV
-				 }
+				}
 			}
 			jsonData = append(jsonData, data)
 		}
-		insertRecords(db, "excelData", jsonData)
+
 		jsonBytes, err := json.MarshalIndent(jsonData, "", "  ")
 		if err != nil {
 			log.Fatal(err)
 		}
-		outputFile, err := os.Create("./convertedFile/"+sheetName+".json")
+
+		outputFile, err := os.Create("./convertedFile/" + sheetName + ".json")
+		if err != nil {
+			log.Fatal(err)
+		}
 		defer outputFile.Close()
-		
+
 		// Write JSON data to a file
 		_, err = outputFile.Write(jsonBytes)
-		fmt.Println("Conversion completed. JSON data is stored in",sheetName+".json", time.Since(timeForEachSheet))
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		fmt.Println("Conversion completed. JSON data is stored in", sheetName+".json", time.Since(timeForEachSheet))
 	}
-	elapsedTime := time.Since(startTime)
-	// Print the elapsed time
-	fmt.Println("Insertion completed in:", elapsedTime)
+
+	wg.Done()
 }
 
 
@@ -119,7 +212,7 @@ func getAllData(db *mongo.Database, collectionName string) ([]interface{})   {
 }
 
 func dbConnection() (*mongo.Database) {
-	mongoURL := "YOUR DB URL"
+	mongoURL := ""
 	// collectionName := "excelData"
 	dbName := "eCom"
 
