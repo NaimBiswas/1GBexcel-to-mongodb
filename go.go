@@ -138,7 +138,7 @@ func processSheet(wg *sync.WaitGroup, sheetChan chan string) {
 		colNames := rows[0]
 		rowValues := rows[1:]
 
-		var jsonData []map[string]interface{}
+		var jsonData []interface{}
 		fmt.Printf("Xlsx Process Started for=================================================================::%v and time:: %v", sheetName, time.Now())
 		fmt.Println()
 		for _, rowValue := range rowValues {
@@ -151,7 +151,7 @@ func processSheet(wg *sync.WaitGroup, sheetChan chan string) {
 			}
 			jsonData = append(jsonData, data)
 		}
-
+		insertRecords(db, "RBC", jsonData)
 		jsonBytes, err := json.MarshalIndent(jsonData, "", "  ")
 		if err != nil {
 			log.Fatal(err)
@@ -175,21 +175,20 @@ func processSheet(wg *sync.WaitGroup, sheetChan chan string) {
 	wg.Done()
 }
 
-
-func insertRecords(db *mongo.Database, collectionName string, data []map[string]interface{}) error {
+func insertRecords(db *mongo.Database, collectionName string, data []interface{}) error {
 	collection := db.Collection(collectionName)
-	var documents []interface{}
-	for _, record := range data {
-		if len(record) != 0 {
-			documents = append(documents, record)
-		} 
-	}
-	_, err := collection.InsertMany(context.Background(), documents)
+	// var documents []interface{}
+	// for _, record := range data {
+	// 	if len(record) != 0 {
+	// 		documents = append(documents, record)
+	// 	}
+	// }
+	_, err := collection.InsertMany(context.Background(), data)
 	if err != nil {
 		fmt.Println(err)
 		return err
 	}
-	fmt.Println("Records Inserted Into Database,collection:", collectionName, "RecordLength:", len(documents))
+	fmt.Println("Records Inserted Into Database,collection:", collectionName, "RecordLength:", len(data))
 	return nil
 }
 
@@ -211,10 +210,10 @@ func getAllData(db *mongo.Database, collectionName string) ([]interface{})   {
 	return []interface{}{}
 }
 
-func dbConnection() (*mongo.Database) {
-	mongoURL := ""
-	// collectionName := "excelData"
-	dbName := "eCom"
+func dbConnection() *mongo.Database {
+	mongoURL := "mongodb://127.0.0.1:27017/?directConnection=true&serverSelectionTimeoutMS=2000"
+	// collectionName := "RBC"
+	dbName := "excelData"
 
 	clientOptions := options.Client().ApplyURI(mongoURL)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
